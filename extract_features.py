@@ -161,9 +161,14 @@ def load_zipflow_batch(flow_x_zipdata, flow_y_zipdata,
 
 
 
-def run(mode='rgb', load_model='', sample_mode='oversample', frequency=16,
-    input_dir='', output_dir='', batch_size=40, usezip=False):
+def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency=16,
+    input_dir='', output_dir='', batch_size=40, usezip=False, segment_json=''):
 
+    output_dir = os.path.join(output_dir, split)
+    input_dir = os.path.join(input_dir, split)
+    segment_json = segment_json.format(split)
+    with open(segment_json, 'r') as json_file:
+        json_video_label = json_file.read()
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     chunk_size = 16
@@ -319,11 +324,12 @@ if __name__ == '__main__':
     parser.add_argument('--mode', default='rgb', type=str)
     parser.add_argument('--load_model', default='models/rgb_imagenet.pt',type=str)
     parser.add_argument('--input_dir', default='/data/DataSets/THUMOS14/frames',  type=str)
+    parser.add_argument('--segment_json', default='data/segment_{}.json',  type=str)
+    parser.add_argument('--split', type=str, default='val')
     parser.add_argument('--output_dir', default='output/rgb', type=str)
     parser.add_argument('--batch_size', type=int, default=40)
     parser.add_argument('--sample_mode', default='resize', type=str)
     parser.add_argument('--frequency', type=int, default=16)
-
     parser.add_argument('--usezip', dest='usezip', action='store_true')
     parser.add_argument('--no-usezip', default=True, dest='usezip', action='store_false')
     parser.set_defaults(usezip=True)
@@ -333,8 +339,10 @@ if __name__ == '__main__':
     run(mode=args.mode, 
         load_model=args.load_model,
         sample_mode=args.sample_mode,
-        input_dir=args.input_dir, 
+        input_dir=args.input_dir,
+        split = args.split,
         output_dir=args.output_dir,
         batch_size=args.batch_size,
         frequency=args.frequency,
-        usezip=args.usezip)
+        usezip=args.usezip,
+        segment_json=args.segment_json)

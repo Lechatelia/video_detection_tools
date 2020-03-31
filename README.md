@@ -5,7 +5,7 @@
 * Convert the videos into frame images and optical flows.
 * `python3 extract_features.py ...`
 
-_视频帧_和_光流数据_的**提取**建议参考[mmaction](https://github.com/open-mmlab/mmaction)
+*视频帧*和*光流数据*的**提取**建议参考[mmaction](https://github.com/open-mmlab/mmaction)
 用这个库来提取特征即可
 
 ## Parameters
