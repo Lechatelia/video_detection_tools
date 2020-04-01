@@ -6,7 +6,9 @@
 * `python3 extract_features.py ...`
 
 *视频帧*和*光流数据*的**提取**建议参考[mmaction](https://github.com/open-mmlab/mmaction)
-用这个库来提取特征即可
+用这个库来提取视频帧和光流数据即可，但需要注意的是，这个库提取的图像size和framerate都是与原来视频一致的
+并没有做resize和framerate的统一, 所以在代码中 添加了[```if not resize:  data = data.resize((340, 256), Image.ANTIALIAS)```](extract_features.py)
+
 
 ## Parameters
 <pre>

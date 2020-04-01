@@ -1,5 +1,6 @@
 import os
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0,1,2,3"
 import sys
 import io
 import zipfile
@@ -14,21 +15,26 @@ import torchvision
 from PIL import Image
 
 import numpy as np
-
+import json
 from pytorch_i3d import InceptionI3d
 
 import pdb
 
+print('CUDA available: {}'.format(torch.cuda.is_available()))
+
+print('the available CUDA number is : {}'.format(torch.cuda.device_count()))
 
 def load_frame(frame_file, resize=False):
 
     data = Image.open(frame_file)
 
-    assert(data.size[1] == 256)
-    assert(data.size[0] == 340)
+    # assert(data.size[1] == 256)
+    # assert(data.size[0] == 340)
 
     if resize:
         data = data.resize((224, 224), Image.ANTIALIAS)
+    else :
+        data = data.resize((340, 256), Image.ANTIALIAS)
 
     data = np.array(data)
     data = data.astype(float)
@@ -169,6 +175,9 @@ def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency
     segment_json = segment_json.format(split)
     with open(segment_json, 'r') as json_file:
         json_video_label = json_file.read()
+        # json.loads() load后面的s就是load str的意思，所以先要read成str， 再load str to json
+        video_label = json.loads(json_video_label)
+        video_names = list(video_label.keys())
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     chunk_size = 16
@@ -184,27 +193,28 @@ def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency
     
     #i3d.replace_logits(157)
     i3d.load_state_dict(torch.load(load_model))
-    i3d.cuda()
+    i3d = torch.nn.DataParallel(i3d).cuda()
 
-    i3d.train(False)  # Set model to evaluate mode
+
+    i3d.eval()  # Set model to evaluate mode
 
     def forward_batch(b_data):
-        b_data = b_data.transpose([0, 4, 1, 2, 3])
-        b_data = torch.from_numpy(b_data)   # b,c,t,h,w  # 40x3x16x224x224
-
-        b_data = Variable(b_data.cuda(), volatile=True).float()
-        b_features = i3d.extract_features(b_data)
+        b_data = b_data.transpose([0, 4, 1, 2, 3])    # 将channel提前
+        b_data = torch.from_numpy(b_data)   # b,c,t,h,w  # bsx3x16x224x224
+        with torch.no_grad():
+            b_data =b_data.cuda().float()
+            b_features = i3d(b_data, features=True) # [bs, 1024, 1, 1, 1]
         
-        b_features = b_features.data.cpu().numpy()[:,:,0,0,0]
+        b_features = b_features.data.cpu().numpy()[:,:,0,0,0] # [bs, 1024]
         return b_features
 
 
-    video_names = [i for i in os.listdir(input_dir) if i[0] == 'v']
+    # video_names = [i for i in os.listdir(input_dir) if i[0] == 'v']
 
-    for video_name in video_names:
+    for video_name in video_names: # 确保一下video list的数量是200/213
 
         save_file = '{}-{}.npz'.format(video_name, mode)
-        if save_file in os.listdir(output_dir):
+        if save_file in os.listdir(output_dir): #如果存在了就不在进行特征提取
             continue
 
         frames_dir = os.path.join(input_dir, video_name)
@@ -250,13 +260,18 @@ def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency
             frame_indices.append(
                 [j for j in range(i * frequency, i * frequency + chunk_size)])
 
-        frame_indices = np.array(frame_indices)
+        frame_indices = np.array(frame_indices) # [num_snippet, chunk_size] 代表着网络的输入
 
         #frame_indices = np.reshape(frame_indices, (-1, 16)) # Frames to chunks
-        chunk_num = frame_indices.shape[0]
+        chunk_num = frame_indices.shape[0] # 最终的snippet数量
 
-        batch_num = int(np.ceil(chunk_num / batch_size))    # Chunks to batches
+        batch_num = int(np.ceil(chunk_num / batch_size))    # Chunks to batches 要进行多少个batch 向上取整
         frame_indices = np.array_split(frame_indices, batch_num, axis=0)
+        # 注意此处分到batch_num个batch中，为了避免最后一个batch太少，做了一个均分，这里的操作实际上相当于重新规定了batch——szie
+        # 这里实际batch_size 会小于等于命令行中的那个batch——size
+        # 比如9个样本，batch——size开始规定的是4，那么原本应该是4 4 1 进行特征提取
+        # 这里batch——num=3.实际上的batch-size 就会变成 3，3，3
+
 
         if sample_mode == 'oversample':
             full_features = [[] for i in range(10)]
@@ -264,7 +279,8 @@ def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency
             full_features = [[]]
 
         for batch_id in range(batch_num):
-            
+
+            # 注意 我们提取的视频帧
             require_resize = sample_mode == 'resize'
 
             if mode == 'rgb':
@@ -300,18 +316,22 @@ def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency
                 
                 assert(batch_data.shape[-2]==224)
                 assert(batch_data.shape[-3]==224)
+                # batch_data [batch_szie, 16, 2224, 224, 3]
                 full_features[0].append(forward_batch(batch_data))
 
 
-
-        full_features = [np.concatenate(i, axis=0) for i in full_features]
-        full_features = [np.expand_dims(i, axis=0) for i in full_features]
-        full_features = np.concatenate(full_features, axis=0)
+        #full_features是一个 list 如果是多次采样的话，len(list)=10 一般 len(list)=1 元素是每一个batch的特征 [bs,1024]
+        full_features = [np.concatenate(i, axis=0) for i in full_features] # 将每一个采样方式的特征拼接 元素为[num_snippet, 1024]
+        full_features = [np.expand_dims(i, axis=0) for i in full_features] # 元素为[1,num_snippet, 1024]
+        full_features = np.concatenate(full_features, axis=0) # [采样方式, num_snippet, 1024] 除了oversample，其他的采样方式都是1
 
         np.savez(os.path.join(output_dir, save_file), 
             feature=full_features,
             frame_cnt=frame_cnt,
             video_name=video_name)
+
+        # 如果想要调用就是
+        # np.load('output/rgb/val/video_validation_0000266-rgb.npz')['feature']
 
         print('{} done: {} / {}, {}'.format(
             video_name, frame_cnt, clipped_length, full_features.shape))
@@ -330,9 +350,9 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=40)
     parser.add_argument('--sample_mode', default='resize', type=str)
     parser.add_argument('--frequency', type=int, default=16)
-    parser.add_argument('--usezip', dest='usezip', action='store_true')
-    parser.add_argument('--no-usezip', default=True, dest='usezip', action='store_false')
-    parser.set_defaults(usezip=True)
+    parser.add_argument('--usezip', default=False, type=bool)
+    parser.add_argument('--no-usezip', default=False,type=bool)
+    parser.set_defaults(usezip=False)
 
     args = parser.parse_args()
 
