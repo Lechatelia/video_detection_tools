@@ -22,8 +22,8 @@
 --usezip/no-usezip:  whether the frame images are zipped
 </pre>
 
-## Important: Use PyTorch 0.3
-
+## Important: Use PyTorch > 1.0
+## Support multi-gpu
 ## Input Folder Structure
 <pre>
 InputFolder

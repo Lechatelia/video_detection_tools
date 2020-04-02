@@ -350,6 +350,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=40)
     parser.add_argument('--sample_mode', default='resize', type=str)
     parser.add_argument('--frequency', type=int, default=16)
+    # 注意默认是等于chunk_size=16 可以实际调整，当frequency小于16时，网络的输入就会有overlap，大于16时，就会有一些帧数据被舍弃
     parser.add_argument('--usezip', default=False, type=bool)
     parser.add_argument('--no-usezip', default=False,type=bool)
     parser.set_defaults(usezip=False)
