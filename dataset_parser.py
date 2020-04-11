@@ -37,6 +37,7 @@ from collections import defaultdict
 
 FRAME_DIR = 'evaluation/thumos14/Evaluation/annotation'
 # FRAME_DIR = '/data/DataSets/THUMOS14/annotation'
+VIDEO_PATH = '/data/DataSets/THUMOS14/video'
 META_DIR = os.path.join(FRAME_DIR, 'annotation_')
 
 def dataset_label_parser(meta_dir, split, use_ambiguous=False, out_path='data/'):
@@ -79,13 +80,40 @@ def dataset_label_parser(meta_dir, split, use_ambiguous=False, out_path='data/')
     segment[vid].sort(key=lambda x: x[0])
     #将结果返回
   print("{} videos {} segments in the {} split.".format(len(segment.keys()), cnt, split))
+
+  # 获取其他信息 duration  duration val or test
+  keys = list(segment.keys())
+  keys.sort()
+  action_gt = {}
+  for vid_name in keys:
+
+    video_name = os.path.join(VIDEO_PATH, split, vid_name+'.mp4')
+    try:
+      video_cap = cv2.VideoCapture(video_name)
+    except:
+      print("read {} error!".format(video_name))
+    fps = video_cap.get(cv2.CAP_PROP_FPS)
+    framecount = video_cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    # feature_frame
+    print(vid_name+"  FPS: {} Frames: {}".format(fps, framecount))
+    action_gt[vid_name] ={"duration_second": framecount/fps,
+                          "duration_frame": framecount,
+                          "fps": fps,
+                          "annotations": segment[vid_name]}
+
+
   if True:
-    keys = list(segment.keys())
-    keys.sort()
-    video_label = json.dumps(segment, indent=4)
+    video_label = json.dumps(segment)
+    # video_label = json.dumps(segment, indent=4)
     with open(os.path.join(out_path,'segment_{}.json'.format(split)), 'w') as f:
       f.write(video_label)
-
+    video_anno = json.dumps({"dataset": "THUMOS_"+split,
+                              "class_id": class_id,
+                              "action_gt": action_gt
+                              })
+    # video_label = json.dumps(segment, indent=4)
+    with open(os.path.join(out_path,'annotation_{}.json'.format(split)), 'w') as f:
+      f.write(video_anno)
     # with open(os.path.join(out_path,'segment_{}.txt'.format(split)), 'w') as f:
     #   for k in keys:
     #     f.write("{}\n{}\n\n".format(k,segment[k]))
