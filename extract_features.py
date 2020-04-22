@@ -341,23 +341,24 @@ def run(mode='rgb', load_model='', split='', sample_mode='oversample', frequency
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', default='rgb', type=str)
-    parser.add_argument('--load_model', default='models/rgb_imagenet.pt',type=str)
-    parser.add_argument('--input_dir', default='/data/DataSets/THUMOS14/frames',  type=str)
+    parser.add_argument('--mode', default='flow', type=str) # rgb or flow
+    parser.add_argument('--load_model', default='models/{}_imagenet.pt',type=str)
+    parser.add_argument('--input_dir', default='/data/DataSets/THUMOS14/flows',  type=str) # frames or flows
     parser.add_argument('--segment_json', default='data/segment_{}.json',  type=str)
-    parser.add_argument('--split', type=str, default='val')
-    parser.add_argument('--output_dir', default='output/rgb', type=str)
+    parser.add_argument('--split', type=str, default='test') # val or test
+    parser.add_argument('--output_dir', default='output/{}', type=str)
     parser.add_argument('--batch_size', type=int, default=40)
     parser.add_argument('--sample_mode', default='resize', type=str)
-    parser.add_argument('--frequency', type=int, default=16)
+    parser.add_argument('--frequency', type=int, default=8) # 8 or 16
     # 注意默认是等于chunk_size=16 可以实际调整，当frequency小于16时，网络的输入就会有overlap，大于16时，就会有一些帧数据被舍弃
     parser.add_argument('--usezip', default=False, type=bool)
     parser.add_argument('--no-usezip', default=False,type=bool)
     parser.set_defaults(usezip=False)
 
     args = parser.parse_args()
-
-    run(mode=args.mode, 
+    args.load_model = args.load_model.format(args.mode)
+    args.output_dir = args.output_dir.format(args.mode)
+    run(mode=args.mode,
         load_model=args.load_model,
         sample_mode=args.sample_mode,
         input_dir=args.input_dir,
